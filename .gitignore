@@ -1,0 +1,5 @@
+.vscode
+lex.yy.c
+syntaxique.output
+syntaxique.tab.c
+syntaxique.tab.h

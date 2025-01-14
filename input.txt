@@ -1,0 +1,20 @@
+
+int a;
+int b = 99;
+b = 88;
+
+const int c = 33;
+string x = "sdfasdf";
+
+while (b > 55) {
+    int y = 66;
+    b = 3 ;
+    while (x > "dfsdfsdf") {
+    int p = 11111;
+    y = 44 ;
+}
+}
+
+y = 77;
+
+
