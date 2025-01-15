@@ -19,7 +19,7 @@ quadruplet * createQuadruplet(char op[20], char op1[20], char op2[20], char r[20
 //  Le next de ce quadruplet sera NUL
 
 void insertQuadruplet(quadruplet ** head, char op[], char op1[], char op2[], char r[], int pos);
-//  Insertion d'un quadruplet dans une liste dont la tête est le quadruplet quad
+//  Insertion d'un quadruplet dans une liste dont la tête est le quadruplet head
 
 void updateQuadruplet(quadruplet * quad, char br[20], int pos);
 //  Mise à jour de l'opérande 1 (Opérande du branchement) du quadruplet numéro QC

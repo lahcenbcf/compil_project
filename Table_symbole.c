@@ -85,6 +85,16 @@ void setType(Symbol* symbol, DataType newType) {
     }
 }
 
+bool isAlphabetical(const char* str) {
+    while (*str) {
+        if (!((*str >= 'A' && *str <= 'Z') || (*str >= 'a' && *str <= 'z'))) {
+            return false;
+        }
+        str++;
+    }
+    return true;
+}
+
 
 DataType getSymbolType(Symbol* symbol) {
     if (!symbol) {

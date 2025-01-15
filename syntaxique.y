@@ -179,7 +179,8 @@ Statement:
     | DeclarationObjet SEMICOLON
     | FunctionCall SEMICOLON
     | Assignement SEMICOLON
-    | Condition
+    | IfElseStatement
+    | IfStatement
     | WhileLoop
     | ForLoop
     | RETURN SEMICOLON
@@ -229,7 +230,7 @@ ForLoop:
 WhileLoop:
     WhileHead Code C_ACCOL 
     {
-        char adresse[10];
+    char adresse[10];
     char adresseCondWhile [10];
     
 
@@ -267,10 +268,56 @@ WhileCondition:
 
     }
 
+IfElseStatement:
+    ElseHead Code C_ACCOL {
+        char adresse[10];
+        int addrDebutIf = depiler(stack); 
+        sprintf(adresse,"%d",quadIndex);
+        updateQuadruplet(quad,adresse, addrDebutIf);
+        currentScope = currentScope->parentScope;
+    }
+    ;
+
+ElseHead:
+    IfStatement ELSE O_ACCOL {
+        currentScope = createScope("else", nextScopeId++, currentScope);
+        char r[10]; 
+        sprintf(r,"R%d",quadIndex-1);	
+		insertQuadruplet(&quad,"BR","tmp","",r,quadIndex);
+        empiler(stack, quadIndex);
+        quadIndex++;
+    }
 
 
+IfStatement:
+    IfHead Code C_ACCOL 
+    {
+        char adresse[10];
+        int addrDebutIf = depiler(stack); 
+        sprintf(adresse,"%d",quadIndex);
+        updateQuadruplet(quad,adresse, addrDebutIf);
+        currentScope = currentScope->parentScope;
+    }
+    
+
+IfHead:
+    IfCondition Expression C_PARENT O_ACCOL {
+        if($2.type == DATA_TYPE_BOOLEAN){
+        char r[10]; 
+        sprintf(r,"R%d",quadIndex-1);	
+		insertQuadruplet(&quad,"BZ","tmp","",r,quadIndex);  
+        empiler(stack, quadIndex);
+		quadIndex++;
+    }else{
+        printf("Semantic error : cannot evaluate non boolean expression as condition");
+    }
+    }
 
 
+IfCondition:
+    IF O_PARENT {
+        currentScope = createScope("if", nextScopeId++, currentScope);
+    }
 
 
 
@@ -280,7 +327,7 @@ Condition:
     ;
 ConditionELSE: %empty
     | ELSE Condition 
-    | ELSE O_ACCOL  Code C_ACCOL
+    | ELSE O_ACCOL Code C_ACCOL
 
 
 
@@ -307,19 +354,30 @@ Assignement:
                 printf("type mismatch\n");
             }else{
                 char valeurString[255];
+                char temp[255];
+                bool is_temp = false;
+                if ((($3.type == DATA_TYPE_INT) || ($3.type == DATA_TYPE_FLOAT)) || ($3.type == DATA_TYPE_BOOLEAN)) {
+                    if (strcmp($3.stringValue,"")) {
+                        strcpy(temp, $3.stringValue);
+                        is_temp = true;
+                    }
+                }
                 getStringValue($3,valeurString);
                 if(getSymbolType($1) != DATA_TYPE_ARRAY)
-
                     {
                         setValue($1, valeurString);
+                        if (is_temp) {
+                            insertQuadruplet(&quad, ":=", temp, "", $1->name, quadIndex);
+                        }
+                        else {
                             insertQuadruplet(&quad, ":=", valeurString, "", $1->name, quadIndex);
-                            quadIndex++;
+                        }
+                        quadIndex++;                            
                     }
                 else
                     {
                         printf("tableau");
                     }
-
             }
             }
         }
@@ -440,10 +498,10 @@ FuncArguments:
 
 
 Expression:
-    INT_NUMBER {$$.type=DATA_TYPE_INT; $$.integerValue = $1;}
-    | FLOAT_NUMBER {$$.type=DATA_TYPE_FLOAT; $$.floatValue = $1;}
+    INT_NUMBER {$$.type=DATA_TYPE_INT; $$.integerValue = $1; strcpy($$.stringValue, "");}
+    | FLOAT_NUMBER {$$.type=DATA_TYPE_FLOAT; $$.floatValue = $1; strcpy($$.stringValue, "");}
     | CHAINE {$$.type=DATA_TYPE_STRING; strcpy($$.stringValue, $1);} 
-    | BOOL {$$.type=DATA_TYPE_BOOLEAN; $$.booleanValue = $1;}
+    | BOOL {$$.type=DATA_TYPE_BOOLEAN; $$.booleanValue = $1; strcpy($$.stringValue, "");}
     | Variable {
         if($1 != NULL){
             char valeurString[255];
@@ -453,10 +511,12 @@ Expression:
                     case DATA_TYPE_INT:
                         $$.integerValue = atoi(valeurString);
                         $$.type = DATA_TYPE_INT;
+                        strcpy($$.stringValue, $1->name);
                         break;
                     case DATA_TYPE_FLOAT:
                         $$.floatValue = atof(valeurString);
                         $$.type = DATA_TYPE_FLOAT;
+                        strcpy($$.stringValue, $1->name);
                         break;
                     case DATA_TYPE_STRING:
                         strcpy($$.stringValue, valeurString);
@@ -465,6 +525,7 @@ Expression:
                     case DATA_TYPE_BOOLEAN:
                         $$.booleanValue = strcmp(valeurString, "true") == 0;
                         $$.type = DATA_TYPE_BOOLEAN;
+                        strcpy($$.stringValue, $1->name);
                         break;
                     default :
                         $$.type = -1;
@@ -476,16 +537,529 @@ Expression:
     }
     | Tableau
     | FunctionCall
-    | O_PARENT Expression C_PARENT 
-    | NEGATION Expression 
+    | O_PARENT Expression C_PARENT {
+        $$.type = $2.type;
+        $$.integerValue = $2.integerValue;
+        $$.floatValue = $2.floatValue;
+        strcpy($$.stringValue, $2.stringValue);
+        $$.booleanValue = $2.booleanValue;
+    }
+    
+    | NEGATION Expression {
+        if ($2.type = DATA_TYPE_BOOLEAN) {
+            $$.type = DATA_TYPE_BOOLEAN;
+
+            char buff[255];
+            char qcString[20];
+
+            if (strcmp($2.stringValue,"")) {
+                strcpy(buff, $2.stringValue);
+            }
+
+            else {
+                sprintf(buff, "%s", $2.booleanValue ? "true" : "false");
+            }
+
+            $$.booleanValue = !$2.booleanValue;
+
+
+            sprintf(qcString, "%s%d", "R", quadIndex);
+            strcpy($$.stringValue, qcString);
+
+
+            insertQuadruplet(&quad , "!", buff, "", qcString, quadIndex);
+            quadIndex++;
+            break;
+        }
+        else {
+            printf("Error : Can not negate non boolean expression");
+        }
+    }
     | MINUS_SIGN Expression 
     | PLUS_SIGN Expression 
-    | Expression PLUS_SIGN Expression 
-    | Expression MINUS_SIGN Expression 
-    | Expression MUL Expression 
-    | Expression DIV Expression 
-    | Expression INF Expression 
-    | Expression INF_EQ Expression 
+    | Expression PLUS_SIGN Expression {
+        if ($1.type == $3.type) {
+            if ($1.type == DATA_TYPE_INT) {
+                $$.integerValue = $1.integerValue + $3.integerValue;
+
+                char buff[255];
+                char buff2[255];
+                char qcString[20];
+
+                
+                if (strcmp($1.stringValue,"")) {
+                    strcpy(buff, $1.stringValue);
+                }
+                else {
+                    sprintf(buff, "%d", $1.integerValue);
+                }
+            
+                if (strcmp($3.stringValue,"")) {
+                strcpy(buff2, $3.stringValue);
+                }
+                else {
+                    sprintf(buff2, "%d", $3.integerValue);
+                }
+                
+                
+                sprintf(qcString, "%s%d", "R", quadIndex);
+
+                $$.type = DATA_TYPE_INT;
+                strcpy($$.stringValue, qcString);
+
+                insertQuadruplet(&quad , "+", buff, buff2, qcString, quadIndex);
+                quadIndex++;
+                break;
+            }
+            if ($1.type == DATA_TYPE_FLOAT) {
+                $$.floatValue = $1.floatValue + $3.floatValue;
+    
+                char buff[255];
+                char buff2[255];
+                char qcString[20];
+
+                if (strcmp($1.stringValue,"")) {
+                    strcpy(buff, $1.stringValue);
+                }
+                else {
+                    sprintf(buff, "%f", $1.floatValue);
+                }
+
+                if (strcmp($3.stringValue,"")) {
+                    strcpy(buff2, $3.stringValue);
+                }
+                else {
+                    sprintf(buff2, "%f", $3.floatValue);
+                }
+
+                sprintf(qcString, "%s%d", "R", quadIndex);
+
+                $$.type = DATA_TYPE_FLOAT;
+                strcpy($$.stringValue, qcString);
+
+                insertQuadruplet(&quad , "+", buff, buff2, qcString, quadIndex);
+                quadIndex++;
+                break;
+            }
+        }
+        else
+        {
+            printf("Type mismatch\n");
+        }
+    } 
+    | Expression MINUS_SIGN Expression {
+        if ($1.type == $3.type) {
+            if ($1.type == DATA_TYPE_INT) {
+                $$.integerValue = $1.integerValue - $3.integerValue;
+
+                char buff[255];
+                char buff2[255];
+                char qcString[20];
+
+                
+                if (strcmp($1.stringValue,"")) {
+                    strcpy(buff, $1.stringValue);
+                }
+                else {
+                    sprintf(buff, "%d", $1.integerValue);
+                }
+            
+                if (strcmp($3.stringValue,"")) {
+                strcpy(buff2, $3.stringValue);
+                }
+                else {
+                    sprintf(buff2, "%d", $3.integerValue);
+                }
+                
+
+                sprintf(qcString, "%s%d", "R", quadIndex);
+
+                $$.type = DATA_TYPE_INT;
+                strcpy($$.stringValue, qcString);
+
+                insertQuadruplet(&quad , "-", buff, buff2, qcString, quadIndex);
+                quadIndex++;
+                break;
+            }
+            if ($1.type == DATA_TYPE_FLOAT) {
+                $$.floatValue = $1.floatValue - $3.floatValue;
+
+                char buff[255];
+                char buff2[255];
+                char qcString[20];
+
+                if (strcmp($1.stringValue,"")) {
+                    strcpy(buff, $1.stringValue);
+                }
+                else {
+                    sprintf(buff, "%f", $1.floatValue);
+                }
+
+                if (strcmp($3.stringValue,"")) {
+                    strcpy(buff2, $3.stringValue);
+                }
+                else {
+                    sprintf(buff2, "%f", $3.floatValue);
+                }
+
+                sprintf(qcString, "%s%d", "R", quadIndex);
+
+                $$.type = DATA_TYPE_FLOAT;
+                strcpy($$.stringValue, qcString);
+
+                insertQuadruplet(&quad , "-", buff, buff2, qcString, quadIndex);
+                quadIndex++;
+                break;
+            }
+        }
+        else
+        {
+            printf("Type mismatch\n");
+        }
+    }
+    | Expression MUL Expression {
+        if ($1.type == $3.type) {
+            if ($1.type == DATA_TYPE_INT) {
+                $$.integerValue = $1.integerValue * $3.integerValue;
+
+                char buff[255];
+                char buff2[255];
+                char qcString[20];
+
+                if (strcmp($1.stringValue,"")) {
+                    strcpy(buff, $1.stringValue);
+                }
+                else {
+                    sprintf(buff, "%d", $1.integerValue);
+                }
+
+                if (strcmp($3.stringValue,"")) {
+                    strcpy(buff2, $3.stringValue);
+                }
+                else {
+                    sprintf(buff2, "%d", $3.integerValue);
+                }
+
+                sprintf(qcString, "%s%d", "R", quadIndex);
+
+                $$.type = DATA_TYPE_INT;
+                strcpy($$.stringValue, qcString);
+
+                insertQuadruplet(&quad , "*", buff, buff2, qcString, quadIndex);
+                quadIndex++;
+                break;
+            }
+            if ($1.type == DATA_TYPE_FLOAT) {
+                $$.floatValue = $1.floatValue * $3.floatValue;
+
+                char buff[255];
+                char buff2[255];
+                char qcString[20];
+
+                if (strcmp($1.stringValue,"")) {
+                    strcpy(buff, $1.stringValue);
+                }
+                else {
+                    sprintf(buff, "%f", $1.floatValue);
+                }
+
+                if (strcmp($3.stringValue,"")) {
+                    strcpy(buff2, $3.stringValue);
+                }
+                else {
+                    sprintf(buff2, "%f", $3.floatValue);
+                }
+
+                sprintf(qcString, "%s%d", "R", quadIndex);
+
+                $$.type = DATA_TYPE_FLOAT;
+                strcpy($$.stringValue, qcString);
+
+                insertQuadruplet(&quad , "*", buff, buff2, qcString, quadIndex);
+                quadIndex++;
+                break;
+            }
+        }
+        else
+        {
+            printf("Type mismatch\n");
+        }
+    }
+    | Expression DIV Expression {
+        if ($1.type == $3.type) {
+            if ($1.type == DATA_TYPE_INT) {
+                if ($3.integerValue != 0) {
+                    $$.integerValue = $1.integerValue / $3.integerValue;
+
+                    char buff[255];
+                    char buff2[255];
+                    char qcString[20];
+
+                    if (strcmp($1.stringValue,"")) {
+                        strcpy(buff, $1.stringValue);
+                    }
+                    else {
+                        sprintf(buff, "%d", $1.integerValue);
+                    }
+
+                    if (strcmp($3.stringValue,"")) {
+                        strcpy(buff2, $3.stringValue);
+                    }
+                    else {
+                        sprintf(buff2, "%d", $3.integerValue);
+                    }
+
+                    sprintf(qcString, "%s%d", "R", quadIndex);
+
+                    $$.type = DATA_TYPE_INT;
+                    strcpy($$.stringValue, qcString);
+
+                    insertQuadruplet(&quad , "/", buff, buff2, qcString, quadIndex);
+                    quadIndex++;
+                    break;
+                }
+                else {
+                    printf("Error : Division by zero\n");
+                }
+                
+            }
+            if ($1.type == DATA_TYPE_FLOAT) {
+                if ($3.floatValue != 0) {
+                    $$.floatValue = $1.floatValue / $3.floatValue;
+
+                    char buff[255];
+                    char buff2[255];
+                    char qcString[20];
+
+                    if (strcmp($1.stringValue,"")) {
+                        strcpy(buff, $1.stringValue);
+                    }
+                    else {
+                        sprintf(buff, "%f", $1.floatValue);
+                    }
+
+                    if (strcmp($3.stringValue,"")) {
+                        strcpy(buff2, $3.stringValue);
+                    }
+                    else {
+                        sprintf(buff2, "%f", $3.floatValue);
+                    }
+
+                    sprintf(qcString, "%s%d", "R", quadIndex);
+
+                    $$.type = DATA_TYPE_FLOAT;
+                    strcpy($$.stringValue, qcString);
+
+                    insertQuadruplet(&quad , "/", buff, buff2, qcString, quadIndex);
+                    quadIndex++;
+                    break;
+                }
+                else {
+                    printf("Error : Division by zero\n");
+                }
+            }
+        }
+        else
+        {
+            printf("Type mismatch\n");
+        }
+    }
+    | Expression INF Expression {
+        if($1.type == $3.type){
+                $$.type=DATA_TYPE_BOOLEAN;
+                if  ($1.type ==DATA_TYPE_STRING ) 
+                    
+                    {
+                        if(strcmp($1.stringValue,$3.stringValue) < 0)
+                        {
+                            $$.booleanValue=true;
+                        }
+                        else{
+                            $$.booleanValue=false;
+                        }
+                        char buff[255];
+                        char buff2[255];
+                        char qcString[20];
+                        strcpy(buff, $1.stringValue);
+                        strcpy(buff2, $3.stringValue);
+                        sprintf(qcString, "%s%d", "R",quadIndex);
+                        insertQuadruplet(&quad, "LT",buff, buff2,qcString, quadIndex);
+                        quadIndex++;
+                        
+                    } else if ($1.type ==DATA_TYPE_INT ) 
+                        
+                 
+                    {
+                        if($1.integerValue < $3.integerValue)
+                        {
+                            $$.booleanValue=true;
+                        }
+                        else{
+                            $$.booleanValue=false;
+                        }
+
+                        char buff[255];
+                        char buff2[255];
+                        char qcString[20];
+
+                        if (strcmp($1.stringValue,"")) {
+                            strcpy(buff, $1.stringValue);
+                        }
+                        else {
+                            sprintf(buff, "%d", $1.integerValue);
+                        }
+
+                        if (strcmp($3.stringValue,"")) {
+                            strcpy(buff2, $3.stringValue);
+                        }
+                        else {
+                            sprintf(buff2, "%d", $3.integerValue);
+                        }
+
+                        sprintf(qcString, "%s%d", "R",quadIndex);
+                        strcpy($$.stringValue, qcString);
+                        insertQuadruplet(&quad, "LT",buff, buff2,qcString, quadIndex);
+                        quadIndex++;
+                        break;
+                    } else if ($1.type ==DATA_TYPE_FLOAT ) 
+                            
+                 
+                    {
+                        if($1.floatValue < $3.floatValue)
+                        {
+                            $$.booleanValue=true;
+                        }
+                        else{
+                            $$.booleanValue=false;
+                        }
+
+                        char buff[255];
+                        char buff2[255];
+                        char qcString[20];
+
+                        if (strcmp($1.stringValue,"")) {
+                            strcpy(buff, $1.stringValue);
+                        }
+                        else {
+                            sprintf(buff, "%f", $1.floatValue);
+                        }
+
+                        if (strcmp($3.stringValue,"")) {
+                            strcpy(buff2, $3.stringValue);
+                        }
+                        else {
+                            sprintf(buff2, "%f", $3.floatValue);
+                        }
+
+                        sprintf(qcString, "%s%d", "R",quadIndex);
+                        strcpy($$.stringValue, qcString);
+                        insertQuadruplet(&quad, "LT",buff, buff2,qcString, quadIndex);
+                        quadIndex++;
+                        break;
+                    }
+                            
+                         
+            }
+            else
+            {
+                printf("Type mismatch\n");
+            }
+    }
+    | Expression INF_EQ Expression {
+        if($1.type == $3.type){
+                $$.type=DATA_TYPE_BOOLEAN;
+                if  ($1.type ==DATA_TYPE_STRING ) 
+                    
+                    {
+                        if(strcmp($1.stringValue,$3.stringValue) <= 0)
+                        {
+                            $$.booleanValue=true;
+                        }
+                        else{
+                            $$.booleanValue=false;
+                        }
+                        char buff[255];
+                        char buff2[255];
+                        char qcString[20];
+                        strcpy(buff, $1.stringValue);
+                        strcpy(buff2, $3.stringValue);
+                        sprintf(qcString, "%s%d", "R",quadIndex);
+                        insertQuadruplet(&quad, "LTE",buff, buff2,qcString, quadIndex);
+                        quadIndex++;
+                        
+                    } else if ($1.type ==DATA_TYPE_INT ) 
+                        
+                 
+                    {
+                        if($1.integerValue <= $3.integerValue)
+                        {
+                            $$.booleanValue=true;
+                        }
+                        else{
+                            $$.booleanValue=false;
+                        }
+                        char buff[255];
+                        char buff2[255];
+                        char qcString[20];
+                        if (strcmp($1.stringValue,"")) {
+                            strcpy(buff, $1.stringValue);
+                        }
+                        else {
+                            sprintf(buff, "%d", $1.integerValue);
+                        }
+
+                        if (strcmp($3.stringValue,"")) {
+                            strcpy(buff2, $3.stringValue);
+                        }
+                        else {
+                            sprintf(buff2, "%d", $3.integerValue);
+                        }
+                        sprintf(qcString, "%s%d", "R",quadIndex);
+                        strcpy($$.stringValue, qcString);
+                        insertQuadruplet(&quad, "LTE",buff, buff2,qcString, quadIndex);
+                        quadIndex++;
+                        break;
+                    } else if ($1.type ==DATA_TYPE_FLOAT ) 
+                            
+                 
+                    {
+                        if($1.floatValue <= $3.floatValue)
+                        {
+                            $$.booleanValue=true;
+                        }
+                        else{
+                            $$.booleanValue=false;
+                        }
+                        char buff[255];
+                        char buff2[255];
+                        char qcString[20];
+                        if (strcmp($1.stringValue,"")) {
+                            strcpy(buff, $1.stringValue);
+                        }
+                        else {
+                            sprintf(buff, "%f", $1.floatValue);
+                        }
+
+                        if (strcmp($3.stringValue,"")) {
+                            strcpy(buff2, $3.stringValue);
+                        }
+                        else {
+                            sprintf(buff2, "%f", $3.floatValue);
+                        }
+                        sprintf(qcString, "%s%d", "R",quadIndex);
+                        strcpy($$.stringValue, qcString);
+                        insertQuadruplet(&quad, "LTE",buff, buff2,qcString, quadIndex);
+                        quadIndex++;
+                        break;
+                    }
+                            
+                         
+            }
+            else
+            {
+                printf("Type mismatch\n");
+            }
+    }
     | Expression SUP Expression
     {
         if($1.type == $3.type){
@@ -520,12 +1094,27 @@ Expression:
                         else{
                             $$.booleanValue=false;
                         }
+                        
                         char buff[255];
                         char buff2[255];
                         char qcString[20];
-                        sprintf(buff, "%d", $1.integerValue);
-                        sprintf(buff2, "%d", $3.integerValue);
+
+                        if (strcmp($1.stringValue,"")) {
+                            strcpy(buff, $1.stringValue);
+                        }
+                        else {
+                            sprintf(buff, "%d", $1.integerValue);
+                        }
+
+                        if (strcmp($3.stringValue,"")) {
+                            strcpy(buff2, $3.stringValue);
+                        }
+                        else {
+                            sprintf(buff2, "%d", $3.integerValue);
+                        }
+
                         sprintf(qcString, "%s%d", "R",quadIndex);
+                        strcpy($$.stringValue, qcString);
                         insertQuadruplet(&quad, "GT",buff, buff2,qcString, quadIndex);
                         quadIndex++;
                         break;
@@ -543,9 +1132,21 @@ Expression:
                         char buff[255];
                         char buff2[255];
                         char qcString[20];
-                        sprintf(buff, "%f", $1.floatValue);
-                        sprintf(buff2, "%f", $3.floatValue);
+                        if (strcmp($1.stringValue,"")) {
+                            strcpy(buff, $1.stringValue);
+                        }
+                        else {
+                            sprintf(buff, "%f", $1.floatValue);
+                        }
+
+                        if (strcmp($3.stringValue,"")) {
+                            strcpy(buff2, $3.stringValue);
+                        }
+                        else {
+                            sprintf(buff2, "%f", $3.floatValue);
+                        }
                         sprintf(qcString, "%s%d", "R",quadIndex);
+                        strcpy($$.stringValue, qcString);
                         insertQuadruplet(&quad, "GT",buff, buff2,qcString, quadIndex);
                         quadIndex++;
                         break;
@@ -558,10 +1159,382 @@ Expression:
                 printf("Type mismatch\n");
             }
     }
-    | Expression SUP_EQ Expression 
+    | Expression SUP_EQ Expression {
+        if($1.type == $3.type){
+                $$.type=DATA_TYPE_BOOLEAN;
+                if  ($1.type ==DATA_TYPE_STRING ) 
+                    
+                    {
+                        if(strcmp($1.stringValue,$3.stringValue)>= 0)
+                        {
+                            $$.booleanValue=true;
+                        }
+                        else{
+                            $$.booleanValue=false;
+                        }
+                        char buff[255];
+                        char buff2[255];
+                        char qcString[20];
+                        strcpy(buff, $1.stringValue);
+                        strcpy(buff2, $3.stringValue);
+                        sprintf(qcString, "%s%d", "R",quadIndex);
+                        insertQuadruplet(&quad, "GTE",buff, buff2,qcString, quadIndex);
+                        quadIndex++;
+                        
+                    } else if ($1.type ==DATA_TYPE_INT ) 
+                        
+                 
+                    {
+                        if($1.integerValue >= $3.integerValue)
+                        {
+                            $$.booleanValue=true;
+                        }
+                        else{
+                            $$.booleanValue=false;
+                        }
+                        char buff[255];
+                        char buff2[255];
+                        char qcString[20];
+                        
+                        if (strcmp($1.stringValue,"")) {
+                            strcpy(buff, $1.stringValue);
+                        }
+                        else {
+                            sprintf(buff, "%d", $1.integerValue);
+                        }
+
+                        if (strcmp($3.stringValue,"")) {
+                            strcpy(buff2, $3.stringValue);
+                        }
+                        else {
+                            sprintf(buff2, "%d", $3.integerValue);
+                        }
+
+                        sprintf(qcString, "%s%d", "R",quadIndex);
+                        strcpy($$.stringValue, qcString);
+                        insertQuadruplet(&quad, "GTE",buff, buff2,qcString, quadIndex);
+                        quadIndex++;
+                        break;
+                    } else if ($1.type ==DATA_TYPE_FLOAT ) 
+                            
+                 
+                    {
+                        if($1.floatValue >= $3.floatValue)
+                        {
+                            $$.booleanValue=true;
+                        }
+                        else{
+                            $$.booleanValue=false;
+                        }
+                        char buff[255];
+                        char buff2[255];
+                        char qcString[20];
+                        if (strcmp($1.stringValue,"")) {
+                            strcpy(buff, $1.stringValue);
+                        }
+                        else {
+                            sprintf(buff, "%f", $1.floatValue);
+                        }
+
+                        if (strcmp($3.stringValue,"")) {
+                            strcpy(buff2, $3.stringValue);
+                        }
+                        else {
+                            sprintf(buff2, "%f", $3.floatValue);
+                        }
+                        sprintf(qcString, "%s%d", "R",quadIndex);
+                        strcpy($$.stringValue, qcString);
+                        insertQuadruplet(&quad, "GTE",buff, buff2,qcString, quadIndex);
+                        quadIndex++;
+                        break;
+                    }
+                            
+                         
+            }
+            else
+            {
+                printf("Type mismatch\n");
+            }
+    }
     | Expression DOUBLE_EQUALS Expression
-    | Expression AND Expression 
-    | Expression OR Expression
+    {
+        if($1.type == $3.type){
+                $$.type=DATA_TYPE_BOOLEAN;
+                if  ($1.type ==DATA_TYPE_STRING ) 
+                    
+                    {
+                        if(strcmp($1.stringValue,$3.stringValue) == 0)
+                        {
+                            $$.booleanValue=true;
+                        }
+                        else{
+                            $$.booleanValue=false;
+                        }
+                        char buff[255];
+                        char buff2[255];
+                        char qcString[20];
+                        strcpy(buff, $1.stringValue);
+                        strcpy(buff2, $3.stringValue);
+                        sprintf(qcString, "%s%d", "R",quadIndex);
+                        insertQuadruplet(&quad, "==",buff, buff2,qcString, quadIndex);
+                        quadIndex++;
+                        
+                    } else if ($1.type ==DATA_TYPE_INT ) 
+                        
+                 
+                    {
+                        if($1.integerValue == $3.integerValue)
+                        {
+                            $$.booleanValue=true;
+                        }
+                        else{
+                            $$.booleanValue=false;
+                        }
+                        char buff[255];
+                        char buff2[255];
+                        char qcString[20];
+                        if (strcmp($1.stringValue,"")) {
+                            strcpy(buff, $1.stringValue);
+                        }
+                        else {
+                            sprintf(buff, "%d", $1.integerValue);
+                        }
+
+                        if (strcmp($3.stringValue,"")) {
+                            strcpy(buff2, $3.stringValue);
+                        }
+                        else {
+                            sprintf(buff2, "%d", $3.integerValue);
+                        }
+                        sprintf(qcString, "%s%d", "R",quadIndex);
+                        strcpy($$.stringValue, qcString);
+                        insertQuadruplet(&quad, "==",buff, buff2,qcString, quadIndex);
+                        quadIndex++;
+                        break;
+                    } else if ($1.type ==DATA_TYPE_FLOAT ) 
+                            
+                 
+                    {
+                        if($1.floatValue == $3.floatValue)
+                        {
+                            $$.booleanValue=true;
+                        }
+                        else{
+                            $$.booleanValue=false;
+                        }
+                        char buff[255];
+                        char buff2[255];
+                        char qcString[20];
+                        if (strcmp($1.stringValue,"")) {
+                            strcpy(buff, $1.stringValue);
+                        }
+                        else {
+                            sprintf(buff, "%f", $1.floatValue);
+                        }
+
+                        if (strcmp($3.stringValue,"")) {
+                            strcpy(buff2, $3.stringValue);
+                        }
+                        else {
+                            sprintf(buff2, "%f", $3.floatValue);
+                        }
+                        sprintf(qcString, "%s%d", "R",quadIndex);
+                        strcpy($$.stringValue, qcString);
+                        insertQuadruplet(&quad, "==",buff, buff2,qcString, quadIndex);
+                        quadIndex++;
+                        break;
+                    }
+                            
+                         
+            }
+            else
+            {
+                printf("Type mismatch\n");
+            }
+    }
+    | Expression N_EQUALS Expression {
+        if($1.type == $3.type){
+                $$.type=DATA_TYPE_BOOLEAN;
+                if  ($1.type ==DATA_TYPE_STRING ) 
+                    
+                    {
+                        if(strcmp($1.stringValue,$3.stringValue) != 0)
+                        {
+                            $$.booleanValue=true;
+                        }
+                        else{
+                            $$.booleanValue=false;
+                        }
+                        char buff[255];
+                        char buff2[255];
+                        char qcString[20];
+                        strcpy(buff, $1.stringValue);
+                        strcpy(buff2, $3.stringValue);
+                        sprintf(qcString, "%s%d", "R",quadIndex);
+                        insertQuadruplet(&quad, "!=",buff, buff2,qcString, quadIndex);
+                        quadIndex++;
+                        
+                    } else if ($1.type ==DATA_TYPE_INT ) 
+                        
+                 
+                    {
+                        if($1.integerValue != $3.integerValue)
+                        {
+                            $$.booleanValue=true;
+                        }
+                        else{
+                            $$.booleanValue=false;
+                        }
+                        char buff[255];
+                        char buff2[255];
+                        char qcString[20];
+                        if (strcmp($1.stringValue,"")) {
+                            strcpy(buff, $1.stringValue);
+                        }
+                        else {
+                            sprintf(buff, "%d", $1.integerValue);
+                        }
+
+                        if (strcmp($3.stringValue,"")) {
+                            strcpy(buff2, $3.stringValue);
+                        }
+                        else {
+                            sprintf(buff2, "%d", $3.integerValue);
+                        }
+                        sprintf(qcString, "%s%d", "R",quadIndex);
+                        strcpy($$.stringValue, qcString);
+                        insertQuadruplet(&quad, "!=",buff, buff2,qcString, quadIndex);
+                        quadIndex++;
+                        break;
+                    } else if ($1.type ==DATA_TYPE_FLOAT ) 
+                            
+                 
+                    {
+                        if($1.floatValue != $3.floatValue)
+                        {
+                            $$.booleanValue=true;
+                        }
+                        else{
+                            $$.booleanValue=false;
+                        }
+                        char buff[255];
+                        char buff2[255];
+                        char qcString[20];
+                        if (strcmp($1.stringValue,"")) {
+                            strcpy(buff, $1.stringValue);
+                        }
+                        else {
+                            sprintf(buff, "%f", $1.floatValue);
+                        }
+
+                        if (strcmp($3.stringValue,"")) {
+                            strcpy(buff2, $3.stringValue);
+                        }
+                        else {
+                            sprintf(buff2, "%f", $3.floatValue);
+                        }
+                        sprintf(qcString, "%s%d", "R",quadIndex);
+                        strcpy($$.stringValue, qcString);
+                        insertQuadruplet(&quad, "!=",buff, buff2,qcString, quadIndex);
+                        quadIndex++;
+                        break;
+                    }
+                            
+                         
+            }
+            else
+            {
+                printf("Type mismatch\n");
+            }
+    }
+    | Expression AND Expression {
+        if ($1.type == $3.type) {
+            if ($1.type = DATA_TYPE_BOOLEAN) {
+                $$.type = DATA_TYPE_BOOLEAN;
+
+                char buff[255];
+                char buff2[255];
+                char qcString[20];
+
+                if (strcmp($1.stringValue,"")) {
+                    strcpy(buff, $1.stringValue);
+                }
+
+                else {
+                    sprintf(buff, "%s", $1.booleanValue ? "true" : "false");
+                }
+
+                if (strcmp($3.stringValue,"")) {
+                    strcpy(buff2, $3.stringValue);
+                }
+
+                else {
+                    sprintf(buff2, "%s", $3.booleanValue ? "true" : "false");
+                }
+
+                $$.booleanValue = ($3.booleanValue && $3.booleanValue);
+
+
+                sprintf(qcString, "%s%d", "R", quadIndex);
+                strcpy($$.stringValue, qcString);
+
+
+                insertQuadruplet(&quad , "&", buff, buff2, qcString, quadIndex);
+                quadIndex++;
+                break;
+            }
+            else {
+                printf("Error : & only works between 2 boolean expressions!");
+            }
+        }
+        else {
+            printf("Type mismatch\n");
+        }
+    }
+    | Expression OR Expression {
+        if ($1.type == $3.type) {
+            if ($1.type = DATA_TYPE_BOOLEAN) {
+                $$.type = DATA_TYPE_BOOLEAN;
+
+                char buff[255];
+                char buff2[255];
+                char qcString[20];
+
+                if (strcmp($1.stringValue,"")) {
+                    strcpy(buff, $1.stringValue);
+                }
+
+                else {
+                    sprintf(buff, "%s", $1.booleanValue ? "true" : "false");
+                }
+
+                if (strcmp($3.stringValue,"")) {
+                    strcpy(buff2, $3.stringValue);
+                }
+
+                else {
+                    sprintf(buff2, "%s", $3.booleanValue ? "true" : "false");
+                }
+
+                $$.booleanValue = ($3.booleanValue || $3.booleanValue);
+
+
+                sprintf(qcString, "%s%d", "R", quadIndex);
+                strcpy($$.stringValue, qcString);
+
+
+                insertQuadruplet(&quad , "|", buff, buff2, qcString, quadIndex);
+                quadIndex++;
+                break;
+            }
+            else {
+                printf("Error : | only works between 2 boolean expressions!");
+            }
+        }
+        else {
+            printf("Type mismatch\n");
+        }
+    }
     | ObjectJson
     ;
 

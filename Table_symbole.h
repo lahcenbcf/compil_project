@@ -94,6 +94,7 @@ void insertSymbol(SymbolTable* table, Symbol* symbol);
 Symbol* findSymbol(SymbolTable* table, char* name, Scope* scope);
 void insertSymbolIfNotExists(SymbolTable* table, char* name, SymbolCategory category, Scope* scope);
 void printSymbolTable(SymbolTable* table); // Optionnel pour visualiser les tests
+bool isAlphabetical(const char* str);
 
 
 #endif // TABLE_SYMBOLE_H

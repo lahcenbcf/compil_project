@@ -5,6 +5,7 @@
 #include <set>
 #include <string>
 #include <algorithm>
+#include <functional>
 using namespace std;
 
 map<string, vector<vector<string>>> grammar;
@@ -28,6 +29,76 @@ void initialize() {
         {"ASSIGN", {{"="}}}
     };
 }
+
+bool has_left_recursion() {
+    // Keep track of visited non-terminals for indirect recursion detection
+    set<string> visited;
+    map<string, set<string>> depends_on;
+    
+    // Build dependency graph for indirect recursion detection
+    for (const auto& [non_terminal, productions] : grammar) {
+        for (const auto& production : productions) {
+            if (!production.empty() && grammar.count(production[0])) {
+                depends_on[non_terminal].insert(production[0]);
+            }
+        }
+    }
+
+    // Helper function to detect cycles (indirect recursion) using DFS
+    std::function<bool(const string&, set<string>&)> has_cycle = 
+        [&](const string& current, set<string>& path) -> bool {
+            if (path.count(current)) {
+                return true;
+            }
+            
+            if (visited.count(current)) {
+                return false;
+            }
+            
+            visited.insert(current);
+            path.insert(current);
+            
+            for (const string& next : depends_on[current]) {
+                if (has_cycle(next, path)) {
+                    return true;
+                }
+            }
+            
+            path.erase(current);
+            return false;
+        };
+
+    // Check for direct left recursion
+    for (const auto& [non_terminal, productions] : grammar) {
+        for (const auto& production : productions) {
+            if (!production.empty() && production[0] == non_terminal) {
+                cout << "Direct left recursion found in non-terminal: " << non_terminal << endl;
+                cout << "Production: " << non_terminal << " -> ";
+                for (const auto& symbol : production) {
+                    cout << symbol << " ";
+                }
+                cout << endl;
+                return true;
+            }
+        }
+    }
+
+    // Check for indirect left recursion
+    visited.clear();
+    for (const auto& [non_terminal, _] : grammar) {
+        if (!visited.count(non_terminal)) {
+            set<string> path;
+            if (has_cycle(non_terminal, path)) {
+                cout << "Indirect left recursion detected in the grammar!" << endl;
+                return true;
+            }
+        }
+    }
+
+    cout << "No left recursion found in the grammar." << endl;
+    return false;
+}
+
 
 void find_first() {
     bool updated;
@@ -159,6 +230,11 @@ void parse(vector<string> tokens) {
 
 void test() {
     initialize();
+    
+     if (has_left_recursion()) {
+        cout << "Please eliminate left recursion before proceeding with LL(1) parsing." << endl;
+        return;
+    }
     find_first();
     find_follow();
     find_table();
